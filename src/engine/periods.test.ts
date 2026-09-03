@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { periodFor, periodLabel, periodParams, resolvePeriod, shiftAnchor } from './periods'
+import { periodFor, periodLabel, periodParams, quickPeriods, resolvePeriod, shiftAnchor } from './periods'
 
 const TODAY = '2026-09-30' // a Wednesday
 
@@ -85,5 +85,25 @@ describe('periodLabel', () => {
     expect(periodLabel('year', { from: '2026-01-01', to: '2026-12-31' })).toEqual({ long: '2026', short: '2026' })
     expect(periodLabel('custom', { from: '2026-08-15', to: '2026-09-14' })).toEqual({ long: '15 August to 14 September 2026', short: '15 Aug to 14 Sep' })
     expect(periodLabel('custom', { from: '2025-12-15', to: '2026-01-14' })).toEqual({ long: '15 December 2025 to 14 January 2026', short: '15 Dec to 14 Jan' })
+  })
+})
+
+describe('quickPeriods', () => {
+  it('offers this and last month, this and last quarter, and this year around today', () => {
+    expect(quickPeriods(TODAY)).toEqual([
+      { label: 'This month', from: '2026-09-01', to: '2026-09-30' },
+      { label: 'Last month', from: '2026-08-01', to: '2026-08-31' },
+      { label: 'This quarter', from: '2026-07-01', to: '2026-09-30' },
+      { label: 'Last quarter', from: '2026-04-01', to: '2026-06-30' },
+      { label: 'This year', from: '2026-01-01', to: '2026-12-31' },
+    ])
+  })
+  it('crosses the year boundary in January and the leap day in March', () => {
+    expect(quickPeriods('2027-01-15').slice(1, 4)).toEqual([
+      { label: 'Last month', from: '2026-12-01', to: '2026-12-31' },
+      { label: 'This quarter', from: '2027-01-01', to: '2027-03-31' },
+      { label: 'Last quarter', from: '2026-10-01', to: '2026-12-31' },
+    ])
+    expect(quickPeriods('2028-03-31')[1]).toEqual({ label: 'Last month', from: '2028-02-01', to: '2028-02-29' })
   })
 })

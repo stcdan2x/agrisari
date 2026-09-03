@@ -76,6 +76,17 @@ export function shiftAnchor(kind: AnchoredKind, anchor: ISODate, n: number): ISO
   }
 }
 
+export interface QuickPeriod extends Period {
+  label: string
+}
+
+// The one-tap ranges of the books export (TASK 003 decision 2): this and last month, this
+// and last quarter, this year, around today.
+export function quickPeriods(today: ISODate): QuickPeriod[] {
+  const q = (label: string, kind: AnchoredKind, back: number): QuickPeriod => ({ label, ...periodFor(kind, back ? shiftAnchor(kind, today, -back) : today) })
+  return [q('This month', 'month', 0), q('Last month', 'month', 1), q('This quarter', 'quarter', 0), q('Last quarter', 'quarter', 1), q('This year', 'year', 0)]
+}
+
 const isKind = (s: string | null): s is PeriodKind => PERIOD_KINDS.some((k) => k.kind === s)
 
 export function resolvePeriod(params: URLSearchParams, today: ISODate): ResolvedPeriod {

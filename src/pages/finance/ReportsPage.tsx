@@ -1,14 +1,20 @@
 import { useLiveQuery } from 'dexie-react-hooks'
+import { useState } from 'react'
 import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../components/PageHeader'
 import GuideLink from '../../components/GuideLink'
-import { Badge, Card, inputCls, LinkButton, peso, Row, SubNav } from '../../components/ui'
+import { Badge, btnPrimary, btnSecondary, Card, ErrorText, Field, inputCls, LinkButton, peso, Row, SubNav } from '../../components/ui'
+import { booksRows } from '../../db/exportRepo'
 import { listProducts } from '../../db/productRepo'
 import { historyRows, periodRows } from '../../db/reportRepo'
 import { stockSnapshots } from '../../db/stockRepo'
+import { now } from '../../db/repo'
 import { getStore } from '../../db/storeRepo'
 import { CATEGORY_DEFAULTS } from '../../knowledge/categories'
-import { monthOf, monthRange, todayISO } from '../../engine/dates'
+import { isISODate, monthOf, monthRange, todayISO } from '../../engine/dates'
+import { quickPeriods } from '../../engine/periods'
+import { buildBooks } from '../../export/books'
+import { booksFilename, booksToBlob, XLSX_TYPE } from '../../export/xlsx'
 import { breakEven, cashFlow, incomeStatement, inventoryValuation, marginReport, returns, TAX_RATES, taxEstimate, type CashSection, type TaxEstimate } from '../../engine/finance'
 import { GUIDE_LINKS } from '../../knowledge/guideLinks'
 
@@ -18,6 +24,7 @@ const TABS = [
   { key: 'margin', label: 'Margin' },
   { key: 'valuation', label: 'Stock value' },
   { key: 'breakeven', label: 'Break-even' },
+  { key: 'export', label: 'Export' },
 ] as const
 type Tab = (typeof TABS)[number]['key']
 
@@ -52,6 +59,7 @@ export default function ReportsPage() {
       {(tab as Tab) === 'margin' && <MarginView m={marginReport(period, { sales: rows.sales, products })} />}
       {(tab as Tab) === 'valuation' && <ValuationView v={inventoryValuation(snaps)} />}
       {(tab as Tab) === 'breakeven' && <BreakEvenView b={breakEven(incomeStatement(period, rows))} r={returns(period.to, history)} />}
+      {(tab as Tab) === 'export' && <ExportView key={month} initial={period} />}
     </>
   )
 }
@@ -262,6 +270,90 @@ function TaxView({ t }: { t: TaxEstimate }) {
       <Row label="VATable purchases">{peso(t.vatablePurchases)}</Row>
       <Row label="Input VAT">{t.inputVat > 0 ? `-${peso(t.inputVat)}` : peso(0)}</Row>
       <Row label={t.vatPayable >= 0 ? 'VAT payable' : 'Excess input VAT'}>{peso(Math.abs(t.vatPayable))}</Row>
+    </Card>
+  )
+}
+
+// The accountant pack (TASK 003, decisions 1 to 4): one .xlsx file for a from-to range, shared
+// through the phone's Share sheet where the browser accepts files, downloaded otherwise (the
+// same anchor download as the Settings backup card). Layout only; the sheets are built in
+// src/export/books.ts and written in src/export/xlsx.ts.
+function ExportView({ initial }: { initial: { from: string; to: string } }) {
+  const [from, setFrom] = useState(initial.from)
+  const [to, setTo] = useState(initial.to)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const pick = (p: { from: string; to: string }) => {
+    setFrom(p.from)
+    setTo(p.to)
+    setMessage(null)
+    setError(null)
+  }
+
+  const exportBooks = async () => {
+    setMessage(null)
+    setError(null)
+    if (!isISODate(from) || !isISODate(to)) return setError('Enter both dates.')
+    if (to < from) return setError('The To date is before the From date.')
+    setBusy(true)
+    try {
+      const period = { from, to }
+      const blob = await booksToBlob(buildBooks(period, now(), await booksRows(to)))
+      const file = new File([blob], booksFilename(period), { type: XLSX_TYPE })
+      if (navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: file.name })
+          setMessage(`Shared ${file.name}`)
+        } catch (err) {
+          if (!(err instanceof DOMException && err.name === 'AbortError')) throw err
+        }
+      } else {
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = file.name
+        a.click()
+        URL.revokeObjectURL(url)
+        setMessage(`Saved ${file.name}`)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card title="Export to Excel">
+      <p className="mb-3 text-slate-600">
+        One .xlsx file for the accountant: Summary (income statement, cash flow, tax estimate), Sales, Sale lines, Purchases, Purchase lines, Payments and Ledger for the range; Receivables and Payables open at the To date; Stock as of now.
+      </p>
+      <div className="mb-3 flex flex-wrap gap-2">
+        {quickPeriods(todayISO()).map((q) => (
+          <button key={q.label} type="button" className={`${btnSecondary} px-3 py-1.5 text-sm`} onClick={() => pick(q)}>
+            {q.label}
+          </button>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="From">
+          <input className={inputCls} type="date" value={from} onChange={(e) => pick({ from: e.target.value, to })} />
+        </Field>
+        <Field label="To">
+          <input className={inputCls} type="date" value={to} onChange={(e) => pick({ from, to: e.target.value })} />
+        </Field>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button type="button" className={btnPrimary} disabled={busy} onClick={exportBooks}>
+          {busy ? 'Preparing…' : 'Export to Excel'}
+        </button>
+        {message && <span className="text-sm text-slate-600">{message}</span>}
+      </div>
+      <div className="mt-2">
+        <ErrorText error={error} />
+      </div>
     </Card>
   )
 }
