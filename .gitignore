@@ -1,0 +1,8 @@
+node_modules
+dist
+dev-dist
+*.local
+.DS_Store
+
+# research/sources: PDFs over 5 MB stay local only (see research/sources/README.md)
+/research/sources/pdf/pk_fpa_asd_manual.pdf
