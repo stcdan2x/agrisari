@@ -12,7 +12,10 @@ import { STRATEGIES } from './strategies'
 // headings carry no number ('SS:Suki loyalty schemes').
 
 const RESEARCH = import.meta.glob('../../research/*.md', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
-const research = (name: string) => RESEARCH[`../../research/${name}.md`]
+// The corpus is private and never exported: in the public skeleton the glob is empty and the
+// provenance checks skip (tools/skeleton/README.md); every other test runs there as here.
+const HAS_RESEARCH = Object.keys(RESEARCH).length > 0
+const research = (name: string) => RESEARCH[`../../research/${name}.md`] ?? ''
 const rowIds = new Set([...research('parameters').matchAll(/^\| [a-z-]+ \| ([A-Z]{2}-\d+) \|/gm)].map((m) => m[1]))
 const docOf = (prefix: string) => research(SOURCE_DOCS[prefix])
 
@@ -59,7 +62,7 @@ describe('guide topics', () => {
     for (const s of GUIDE_SECTIONS) expect(`${s.title} ${s.blurb}`.includes(EM_DASH), s.id).toBe(false)
   })
 
-  it('resolve every source against research/parameters.md or a research document heading', () => {
+  it.skipIf(!HAS_RESEARCH)('resolve every source against research/parameters.md or a research document heading', () => {
     expect(rowIds.size).toBe(1046)
     for (const t of GUIDE_TOPICS) for (const s of t.sources) checkSource(s, t.id)
     for (const g of GLOSSARY) checkSource(g.source, `glossary ${g.term}`)

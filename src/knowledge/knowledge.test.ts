@@ -26,7 +26,10 @@ import { STRATEGIES, strategyById } from './strategies'
 
 // The research documents, read as text at test time (never bundled: only this test imports them).
 const RESEARCH = import.meta.glob('../../research/*.md', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
-const research = (name: string) => RESEARCH[`../../research/${name}.md`]
+// The corpus is private and never exported: in the public skeleton the glob is empty and the
+// provenance checks skip (tools/skeleton/README.md); every other test runs there as here.
+const HAS_RESEARCH = Object.keys(RESEARCH).length > 0
+const research = (name: string) => RESEARCH[`../../research/${name}.md`] ?? ''
 const rowIds = new Set([...research('parameters').matchAll(/^\| [a-z-]+ \| ([A-Z]{2}-\d+) \|/gm)].map((m) => m[1]))
 const headingsOf = (prefix: string) => research(SOURCE_DOCS[prefix])
 
@@ -54,7 +57,7 @@ function checkCitations(node: unknown, where: string) {
   for (const [k, v] of Object.entries(o)) if (k !== 'matches') checkCitations(v, `${where}.${k}`)
 }
 
-describe('knowledge citations', () => {
+describe.skipIf(!HAS_RESEARCH)('knowledge citations', () => {
   it('reads the 1046 parameter rows of research/parameters.md', () => {
     expect(rowIds.size).toBe(1046)
     expect(rowIds.has('FK-108')).toBe(true)
