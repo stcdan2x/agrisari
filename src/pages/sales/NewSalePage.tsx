@@ -5,14 +5,14 @@ import BarcodeScanner, { canScan } from '../../components/BarcodeScanner'
 import PageHeader from '../../components/PageHeader'
 import GuideLink from '../../components/GuideLink'
 import { Badge, btnPrimary, btnSecondary, Card, Check, Empty, ErrorText, Field, inputCls, peso } from '../../components/ui'
-import { creditCheck } from '../../db/customerRepo'
+import { createCustomer, creditCheck } from '../../db/customerRepo'
 import { db } from '../../db/db'
 import { createSale, listSales } from '../../db/saleRepo'
 import { stockSnapshots } from '../../db/stockRepo'
 import { todayISO } from '../../engine/dates'
 import { packLabel } from '../../engine/inventory'
-import type { PaymentMethod, Product } from '../../types'
-import { PAYMENT_LABEL } from './labels'
+import type { CustomerType, PaymentMethod, Product } from '../../types'
+import { CUSTOMER_TYPE_LABEL, PAYMENT_LABEL } from './labels'
 
 interface Line {
   product: Product
@@ -22,6 +22,8 @@ interface Line {
 }
 
 const METHODS: PaymentMethod[] = ['cash', 'gcash', 'bank', 'credit', 'mixed']
+const CUSTOMER_TYPES = Object.keys(CUSTOMER_TYPE_LABEL) as CustomerType[]
+const NEW_CUSTOMER = '__new'
 
 // The picker: search by name, brand or barcode; with an empty search it offers the
 // products of the last sales (recent) and the most often sold (favourites).
@@ -35,6 +37,7 @@ export default function NewSalePage() {
   const [date, setDate] = useState(todayISO())
   const [method, setMethod] = useState<PaymentMethod>('cash')
   const [customerId, setCustomerId] = useState('')
+  const [addingCustomer, setAddingCustomer] = useState(false)
   const [paid, setPaid] = useState('')
   const [withDelivery, setWithDelivery] = useState(false)
   const [address, setAddress] = useState('')
@@ -210,17 +213,34 @@ export default function NewSalePage() {
             </select>
           </Field>
           <Field label="Customer" hint={method === 'credit' || needsPaid ? '(needed for credit)' : '(optional)'}>
-            <select className={inputCls} value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+            <select
+              className={inputCls}
+              value={addingCustomer ? NEW_CUSTOMER : customerId}
+              onChange={(e) => {
+                setAddingCustomer(e.target.value === NEW_CUSTOMER)
+                setCustomerId(e.target.value === NEW_CUSTOMER ? '' : e.target.value)
+              }}
+            >
               <option value="">Walk-in</option>
               {customers.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
+              <option value={NEW_CUSTOMER}>Add new customer...</option>
             </select>
           </Field>
           {needsPaid && (
             <Field label="Paid now ₱"><input className={inputCls} value={paid} onChange={(e) => setPaid(e.target.value)} inputMode="decimal" /></Field>
           )}
         </div>
+        {addingCustomer && (
+          <QuickCustomer
+            onAdded={(id) => {
+              setCustomerId(id)
+              setAddingCustomer(false)
+            }}
+            onCancel={() => setAddingCustomer(false)}
+          />
+        )}
         <div className="mt-3">
           <Check label="Deliver this sale" hint="The fee is added to the total; the delivery stays pending until marked delivered." checked={withDelivery} onChange={setWithDelivery} />
         </div>
@@ -249,6 +269,59 @@ export default function NewSalePage() {
         </div>
       </Card>
     </form>
+  )
+}
+
+// A customer created without leaving the sale (TASK 002): the row is saved on Add and
+// selected for the sale in hand. Enter inside the form adds the customer, never posts the sale.
+function QuickCustomer({ onAdded, onCancel }: { onAdded: (id: string) => void; onCancel: () => void }) {
+  const [name, setName] = useState('')
+  const [type, setType] = useState<CustomerType>('backyard')
+  const [contact, setContact] = useState('')
+  const [creditLimit, setCreditLimit] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const add = async () => {
+    setError(null)
+    try {
+      const row = await createCustomer({ name, type, contact, creditLimit: creditLimit === '' ? undefined : Number(creditLimit) })
+      onAdded(row.id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+  return (
+    <div
+      className="mt-2 rounded-xl bg-slate-50 p-3"
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'BUTTON') {
+          e.preventDefault()
+          void add()
+        }
+      }}
+    >
+      <div className="mb-2 text-xs font-semibold uppercase text-slate-400">New customer</div>
+      <div className="grid gap-2">
+        <Field label="Name"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} autoFocus /></Field>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Type">
+            <select className={inputCls} value={type} onChange={(e) => setType(e.target.value as CustomerType)}>
+              {CUSTOMER_TYPES.map((t) => (
+                <option key={t} value={t}>{CUSTOMER_TYPE_LABEL[t]}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Contact" hint="(optional)"><input className={inputCls} value={contact} onChange={(e) => setContact(e.target.value)} /></Field>
+          <Field label="Credit limit ₱" hint="(blank = no limit)"><input className={inputCls} value={creditLimit} onChange={(e) => setCreditLimit(e.target.value)} inputMode="decimal" /></Field>
+        </div>
+      </div>
+      <div className="mt-2">
+        <ErrorText error={error} />
+      </div>
+      <div className="mt-2 flex gap-2">
+        <button type="button" className={`text-sm ${btnSecondary}`} onClick={onCancel}>Cancel</button>
+        <button type="button" className={`flex-1 text-sm ${btnPrimary}`} onClick={add}>Add customer</button>
+      </div>
+    </div>
   )
 }
 
