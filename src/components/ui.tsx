@@ -3,7 +3,7 @@ import { Link, NavLink } from 'react-router-dom'
 
 export const inputCls =
   'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-base outline-none focus:border-brand-500 disabled:bg-slate-100'
-export const btnPrimary = 'rounded-xl bg-brand-600 px-4 py-2.5 font-semibold text-white disabled:opacity-40'
+export const btnPrimary = 'rounded-xl bg-brand-700 px-4 py-2.5 font-semibold text-white disabled:opacity-40'
 export const btnSecondary = 'rounded-xl bg-white px-4 py-2.5 font-semibold text-slate-600 ring-1 ring-slate-300'
 export const btnDanger = 'rounded-xl bg-white px-4 py-2.5 font-semibold text-red-600 ring-1 ring-red-200'
 
@@ -27,7 +27,7 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
   return (
     <label className="flex flex-col gap-1 text-sm font-medium">
       <span>
-        {label} {hint && <span className="font-normal text-slate-400">{hint}</span>}
+        {label} {hint && <span className="font-normal text-slate-500">{hint}</span>}
       </span>
       {children}
     </label>
